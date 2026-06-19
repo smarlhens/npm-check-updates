@@ -40,7 +40,7 @@ const npmConfigFromPnpmWorkspace = memoize(async (options: Options): Promise<Npm
   let pnpmWorkspaceConfig
   try {
     pnpmWorkspaceConfig = await fs.readFile(pnpmWorkspaceConfigPath, 'utf-8')
-  } catch (e) {
+  } catch {
     return {}
   }
 
@@ -70,7 +70,7 @@ interface MinimumReleaseAgeLayer {
 /** Coerces an arbitrary config value into a non-negative minimumReleaseAge number (in minutes), or undefined if invalid. */
 const coerceMinimumReleaseAge = (raw: unknown): number | undefined => {
   const value = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : NaN
-  return typeof value === 'number' && !isNaN(value) && value >= 0 ? value : undefined
+  return typeof value === 'number' && !Number.isNaN(value) && value >= 0 ? value : undefined
 }
 
 /**
@@ -186,14 +186,17 @@ export const list = async (options: Options = {}): Promise<Index<string | undefi
 
   const args = ['ls', '-g', '--json']
   const command = `pnpm ${args.join(' ')}`
-  const { stdout } = await spawnCommand('pnpm', args).catch((err: unknown) => {
+  let stdout: string
+  try {
+    stdout = (await spawnCommand('pnpm', args)).stdout
+  } catch (err) {
     // spawn-please rejects with stderr as a bare string on a non-zero exit code, which loses err.message downstream
     if (err instanceof Error) {
       throw err
     }
 
-    throw new Error(`Error executing "${command}". ${String(err).trim() || 'No error output.'}`)
-  })
+    throw new Error(`Error executing "${command}". ${String(err).trim() || 'No error output.'}`, { cause: err })
+  }
 
   return parseList(stdout, command)
 }
@@ -227,7 +230,7 @@ async function spawnPnpm(
   spawnPleaseOptions?: SpawnPleaseOptions,
 ): Promise<string> {
   const fullArgs = [
-    ...(npmOptions.global ? 'global' : []),
+    ...(npmOptions.global ? 'global' : ''),
     ...(Array.isArray(args) ? args : [args]),
     ...(npmOptions.prefix ? `--prefix=${npmOptions.prefix}` : []),
   ]
